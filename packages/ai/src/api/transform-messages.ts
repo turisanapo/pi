@@ -1,7 +1,7 @@
 import type {
 	Api,
 	AssistantMessage,
-	ImageContent,
+	MediaContent,
 	Message,
 	Model,
 	TextContent,
@@ -9,31 +9,50 @@ import type {
 	ToolResultMessage,
 } from "../types.ts";
 
-const NON_VISION_USER_IMAGE_PLACEHOLDER = "(image omitted: model does not support images)";
-const NON_VISION_TOOL_IMAGE_PLACEHOLDER = "(tool image omitted: model does not support images)";
+const MEDIA_PLACEHOLDERS: Record<MediaContent["type"], { user: string; tool: string }> = {
+	image: {
+		user: "(image omitted: model does not support images)",
+		tool: "(tool image omitted: model does not support images)",
+	},
+	video: {
+		user: "(video omitted: model does not support video)",
+		tool: "(tool video omitted: model does not support video)",
+	},
+	audio: {
+		user: "(audio omitted: model does not support audio)",
+		tool: "(tool audio omitted: model does not support audio)",
+	},
+};
 
-function replaceImagesWithPlaceholder(content: (TextContent | ImageContent)[], placeholder: string): TextContent[] {
-	const result: TextContent[] = [];
-	let previousWasPlaceholder = false;
+function replaceUnsupportedMediaWithPlaceholder(
+	content: (TextContent | MediaContent)[],
+	supported: Model<Api>["input"],
+	kind: "user" | "tool",
+): (TextContent | MediaContent)[] {
+	const result: (TextContent | MediaContent)[] = [];
+	let previousPlaceholder: string | null = null;
 
 	for (const block of content) {
-		if (block.type === "image") {
-			if (!previousWasPlaceholder) {
+		// Unknown block types from untyped callers pass through; providers skip them.
+		const placeholders = block.type !== "text" ? MEDIA_PLACEHOLDERS[block.type] : undefined;
+		if (placeholders && !supported.includes(block.type as MediaContent["type"])) {
+			const placeholder = placeholders[kind];
+			if (previousPlaceholder !== placeholder) {
 				result.push({ type: "text", text: placeholder });
 			}
-			previousWasPlaceholder = true;
+			previousPlaceholder = placeholder;
 			continue;
 		}
 
 		result.push(block);
-		previousWasPlaceholder = block.text === placeholder;
+		previousPlaceholder = block.type === "text" ? block.text : null;
 	}
 
 	return result;
 }
 
-function downgradeUnsupportedImages<TApi extends Api>(messages: Message[], model: Model<TApi>): Message[] {
-	if (model.input.includes("image")) {
+function downgradeUnsupportedMedia<TApi extends Api>(messages: Message[], model: Model<TApi>): Message[] {
+	if (model.input.includes("image") && model.input.includes("video") && model.input.includes("audio")) {
 		return messages;
 	}
 
@@ -41,14 +60,14 @@ function downgradeUnsupportedImages<TApi extends Api>(messages: Message[], model
 		if (msg.role === "user" && Array.isArray(msg.content)) {
 			return {
 				...msg,
-				content: replaceImagesWithPlaceholder(msg.content, NON_VISION_USER_IMAGE_PLACEHOLDER),
+				content: replaceUnsupportedMediaWithPlaceholder(msg.content, model.input, "user"),
 			};
 		}
 
 		if (msg.role === "toolResult") {
 			return {
 				...msg,
-				content: replaceImagesWithPlaceholder(msg.content, NON_VISION_TOOL_IMAGE_PLACEHOLDER),
+				content: replaceUnsupportedMediaWithPlaceholder(msg.content, model.input, "tool"),
 			};
 		}
 
@@ -71,10 +90,10 @@ export function transformMessages<TApi extends Api>(
 	// Normalize null/undefined content from untyped callers (custom tools, hand-built
 	// histories, old session files) so downstream code can rely on the type contract.
 	const normalizedMessages = messages.map((msg) => (msg.content == null ? { ...msg, content: [] } : msg));
-	const imageAwareMessages = downgradeUnsupportedImages(normalizedMessages, model);
+	const mediaAwareMessages = downgradeUnsupportedMedia(normalizedMessages, model);
 
-	// First pass: transform messages (unsupported image downgrade, thinking blocks, tool call ID normalization)
-	const transformed = imageAwareMessages.map((msg) => {
+	// First pass: transform messages (unsupported media downgrade, thinking blocks, tool call ID normalization)
+	const transformed = mediaAwareMessages.map((msg) => {
 		// User messages pass through unchanged
 		if (msg.role === "user") {
 			return msg;

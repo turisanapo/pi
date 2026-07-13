@@ -15,6 +15,7 @@ import type {
 	CacheRetention,
 	Context,
 	ImageContent,
+	MediaContent,
 	Message,
 	Model,
 	ProviderEnv,
@@ -112,7 +113,7 @@ const fromClaudeCodeName = (name: string, tools?: Tool[]) => {
 /**
  * Convert content blocks to Anthropic API format
  */
-function convertContentBlocks(content: (TextContent | ImageContent)[]):
+function convertContentBlocks(content: (TextContent | MediaContent)[]):
 	| string
 	| Array<
 			| { type: "text"; text: string }
@@ -125,14 +126,17 @@ function convertContentBlocks(content: (TextContent | ImageContent)[]):
 					};
 			  }
 	  > {
+	// Video/audio blocks are downgraded to text placeholders in transformMessages
+	// (no Anthropic model declares those capabilities), so only text and images reach here.
+	const supported = content.filter((c): c is TextContent | ImageContent => c.type === "text" || c.type === "image");
 	// If only text blocks, return as concatenated string for simplicity
-	const hasImages = content.some((c) => c.type === "image");
+	const hasImages = supported.some((c) => c.type === "image");
 	if (!hasImages) {
-		return sanitizeSurrogates(content.map((c) => (c as TextContent).text).join("\n"));
+		return sanitizeSurrogates(supported.map((c) => (c as TextContent).text).join("\n"));
 	}
 
 	// If we have images, convert to content block array
-	const blocks = content.map((block) => {
+	const blocks = supported.map((block) => {
 		if (block.type === "text") {
 			return {
 				type: "text" as const,

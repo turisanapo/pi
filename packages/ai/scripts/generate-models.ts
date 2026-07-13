@@ -228,6 +228,14 @@ const OPENAI_LONG_CONTEXT_PRICING_MODEL_IDS = new Set([
 	"gpt-5.6-luna",
 ]);
 
+function parseInputModalities(modalities: string[] | undefined): Model<Api>["input"] {
+	const input: Model<Api>["input"] = ["text"];
+	for (const modality of ["image", "video", "audio"] as const) {
+		if (modalities?.includes(modality)) input.push(modality);
+	}
+	return input;
+}
+
 function withOpenAiLongContextPricing(cost: Model<Api>["cost"]): Model<Api>["cost"] {
 	return {
 		...cost,
@@ -711,10 +719,10 @@ async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 
 			modelKey = model.id; // Keep full ID for OpenRouter
 
-			// Parse input modalities
-			const input: ("text" | "image")[] = ["text"];
-			if (model.architecture?.modality?.includes("image")) {
-				input.push("image");
+			// Parse input modalities (architecture.modality is e.g. "text+image->text")
+			const input: Model<Api>["input"] = ["text"];
+			for (const modality of ["image", "video", "audio"] as const) {
+				if (model.architecture?.modality?.includes(modality)) input.push(modality);
 			}
 
 			// Convert pricing from $/token to $/million tokens
@@ -774,7 +782,7 @@ async function fetchAiGatewayModels(): Promise<Model<any>[]> {
 			// Only include models that support tools
 			if (!tags.includes("tool-use")) continue;
 
-			const input: ("text" | "image")[] = ["text"];
+			const input: Model<Api>["input"] = ["text"];
 			if (tags.includes("vision")) {
 				input.push("image");
 			}
@@ -845,7 +853,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "amazon-bedrock" as const,
 					baseUrl: getBedrockBaseUrl(id),
 					reasoning: m.reasoning === true,
-					input: (m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"]) as ("text" | "image")[],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -871,7 +879,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "anthropic",
 					baseUrl: "https://api.anthropic.com",
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -904,7 +912,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "google",
 					baseUrl: "https://generativelanguage.googleapis.com/v1beta",
 					reasoning: source.reasoning === true,
-					input: source.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(source.modalities?.input),
 					cost: {
 						input: source.cost?.input || 0,
 						output: source.cost?.output || 0,
@@ -945,7 +953,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "google-vertex",
 					baseUrl: VERTEX_BASE_URL,
 					reasoning: source.reasoning === true,
-					input: source.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(source.modalities?.input),
 					cost: {
 						input: source.cost?.input || 0,
 						output: source.cost?.output || 0,
@@ -973,7 +981,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "openai",
 					baseUrl: "https://api.openai.com/v1",
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -999,7 +1007,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "groq",
 					baseUrl: "https://api.groq.com/openai/v1",
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1025,7 +1033,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "cerebras",
 					baseUrl: "https://api.cerebras.ai/v1",
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1051,7 +1059,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "cloudflare-workers-ai",
 					baseUrl: CLOUDFLARE_WORKERS_AI_BASE_URL,
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1107,7 +1115,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "cloudflare-ai-gateway",
 					baseUrl,
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1134,7 +1142,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "xai",
 					baseUrl: "https://api.x.ai/v1",
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1158,8 +1166,6 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 				for (const [modelId, model] of Object.entries(data["zai-coding-plan"].models)) {
 					const m = model as ModelsDevModel;
 					if (m.tool_call !== true) continue;
-					const supportsImage = m.modalities?.input?.includes("image");
-
 					const isGlm52 = modelId === "glm-5.2";
 
 					models.push({
@@ -1170,7 +1176,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 						baseUrl,
 						reasoning: m.reasoning === true,
 						...(isGlm52 ? { thinkingLevelMap: ZAI_GLM52_THINKING_LEVEL_MAP } : {}),
-						input: supportsImage ? ["text", "image"] : ["text"],
+						input: parseInputModalities(m.modalities?.input),
 						cost: {
 							input: m.cost?.input || 0,
 							output: m.cost?.output || 0,
@@ -1203,7 +1209,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "mistral",
 					baseUrl: "https://api.mistral.ai",
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1229,7 +1235,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "huggingface",
 					baseUrl: "https://router.huggingface.co/v1",
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1259,7 +1265,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					// Fireworks Anthropic-compatible API - SDK appends /v1/messages
 					baseUrl: "https://api.fireworks.ai/inference",
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1302,7 +1308,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					baseUrl: NVIDIA_BASE_URL,
 					headers: { ...NVIDIA_HEADERS },
 					reasoning: m.reasoning === true,
-					input: m.modalities.input.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1334,7 +1340,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					baseUrl: TOGETHER_BASE_URL,
 					reasoning,
 					...(thinkingLevelMap ? { thinkingLevelMap } : {}),
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1440,7 +1446,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: variant.provider,
 					baseUrl,
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1484,7 +1490,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider: "github-copilot",
 					baseUrl: "https://api.individual.githubcopilot.com",
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1529,7 +1535,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 						// MiniMax's Anthropic-compatible API - SDK appends /v1/messages
 						baseUrl,
 						reasoning: m.reasoning === true,
-						input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+						input: parseInputModalities(m.modalities?.input),
 						cost: {
 							input: m.cost?.input || 0,
 							output: m.cost?.output || 0,
@@ -1569,7 +1575,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					baseUrl: "https://api.kimi.com/coding",
 					headers: { ...KIMI_STATIC_HEADERS },
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1615,7 +1621,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					provider,
 					baseUrl,
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,
@@ -1672,7 +1678,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					baseUrl,
 					compat: xiaomiCompat,
 					reasoning: m.reasoning === true,
-					input: m.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					input: parseInputModalities(m.modalities?.input),
 					cost: {
 						input: m.cost?.input || 0,
 						output: m.cost?.output || 0,

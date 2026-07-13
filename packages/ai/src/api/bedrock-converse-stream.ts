@@ -32,7 +32,7 @@ import type {
 	AssistantMessage,
 	CacheRetention,
 	Context,
-	ImageContent,
+	MediaContent,
 	Model,
 	ProviderEnv,
 	SimpleStreamOptions,
@@ -726,12 +726,12 @@ function createRequiredTextBlock(text: string): ContentBlock.TextMember {
 	return createNonBlankTextBlock(text) ?? { text: EMPTY_TEXT_PLACEHOLDER };
 }
 
-function convertToolResultContent(content: (TextContent | ImageContent)[]): ToolResultContentBlock[] {
+function convertToolResultContent(content: (TextContent | MediaContent)[]): ToolResultContentBlock[] {
 	const result: ToolResultContentBlock[] = [];
 	for (const c of content) {
 		if (c.type === "image") {
 			result.push({ image: createImageBlock(c.mimeType, c.data) });
-		} else {
+		} else if (c.type === "text") {
 			const textBlock = createNonBlankTextBlock(c.text);
 			if (textBlock) result.push(textBlock);
 		}

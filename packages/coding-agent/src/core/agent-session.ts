@@ -24,7 +24,14 @@ import type {
 	PrepareNextTurnContext,
 	ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai/compat";
+import type {
+	AssistantMessage,
+	ImageContent,
+	MediaContent,
+	Message,
+	Model,
+	TextContent,
+} from "@earendil-works/pi-ai/compat";
 import {
 	clampThinkingLevel,
 	cleanupSessionResources,
@@ -204,7 +211,9 @@ export interface ExtensionBindings {
 export interface PromptOptions {
 	/** Whether to expand file-based prompt templates (default: true) */
 	expandPromptTemplates?: boolean;
-	/** Image attachments */
+	/** Media attachments (image, video, audio) */
+	attachments?: MediaContent[];
+	/** @deprecated Use `attachments`. Merged with `attachments` when both are set. */
 	images?: ImageContent[];
 	/** When streaming, how to queue the message: "steer" (interrupt) or "followUp" (wait). Required if streaming. */
 	streamingBehavior?: "steer" | "followUp";
@@ -1092,11 +1101,14 @@ export class AgentSession {
 
 			// Emit input event for extension interception (before skill/template expansion)
 			let currentText = text;
-			let currentImages = options?.images;
+			let currentAttachments =
+				options?.images || options?.attachments
+					? [...(options?.images ?? []), ...(options?.attachments ?? [])]
+					: undefined;
 			if (this._extensionRunner.hasHandlers("input")) {
 				const inputResult = await this._extensionRunner.emitInput(
 					currentText,
-					currentImages,
+					currentAttachments,
 					options?.source ?? "interactive",
 					this.isStreaming ? options?.streamingBehavior : undefined,
 				);
@@ -1106,7 +1118,7 @@ export class AgentSession {
 				}
 				if (inputResult.action === "transform") {
 					currentText = inputResult.text;
-					currentImages = inputResult.images ?? currentImages;
+					currentAttachments = inputResult.images ?? currentAttachments;
 				}
 			}
 
@@ -1125,9 +1137,9 @@ export class AgentSession {
 					);
 				}
 				if (options.streamingBehavior === "followUp") {
-					await this._queueFollowUp(expandedText, currentImages);
+					await this._queueFollowUp(expandedText, currentAttachments);
 				} else {
-					await this._queueSteer(expandedText, currentImages);
+					await this._queueSteer(expandedText, currentAttachments);
 				}
 				preflightResult?.(true);
 				return;
@@ -1164,9 +1176,9 @@ export class AgentSession {
 			messages = [];
 
 			// Add user message
-			const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: expandedText }];
-			if (currentImages) {
-				userContent.push(...currentImages);
+			const userContent: (TextContent | MediaContent)[] = [{ type: "text", text: expandedText }];
+			if (currentAttachments) {
+				userContent.push(...currentAttachments);
 			}
 			messages.push({
 				role: "user",
@@ -1183,7 +1195,7 @@ export class AgentSession {
 			// Emit before_agent_start extension event
 			const result = await this._extensionRunner.emitBeforeAgentStart(
 				expandedText,
-				currentImages,
+				currentAttachments,
 				this._baseSystemPrompt,
 				this._baseSystemPromptOptions,
 			);
@@ -1288,10 +1300,10 @@ export class AgentSession {
 	 * Delivered after the current assistant turn finishes executing its tool calls,
 	 * before the next LLM call.
 	 * Expands skill commands and prompt templates. Errors on extension commands.
-	 * @param images Optional image attachments to include with the message
+	 * @param attachments Optional media attachments to include with the message
 	 * @throws Error if text is an extension command
 	 */
-	async steer(text: string, images?: ImageContent[]): Promise<void> {
+	async steer(text: string, attachments?: MediaContent[]): Promise<void> {
 		// Check for extension commands (cannot be queued)
 		if (text.startsWith("/")) {
 			this._throwIfExtensionCommand(text);
@@ -1301,17 +1313,17 @@ export class AgentSession {
 		let expandedText = this._expandSkillCommand(text);
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
-		await this._queueSteer(expandedText, images);
+		await this._queueSteer(expandedText, attachments);
 	}
 
 	/**
 	 * Queue a follow-up message to be processed after the agent finishes.
 	 * Delivered only when agent has no more tool calls or steering messages.
 	 * Expands skill commands and prompt templates. Errors on extension commands.
-	 * @param images Optional image attachments to include with the message
+	 * @param attachments Optional media attachments to include with the message
 	 * @throws Error if text is an extension command
 	 */
-	async followUp(text: string, images?: ImageContent[]): Promise<void> {
+	async followUp(text: string, attachments?: MediaContent[]): Promise<void> {
 		// Check for extension commands (cannot be queued)
 		if (text.startsWith("/")) {
 			this._throwIfExtensionCommand(text);
@@ -1321,18 +1333,18 @@ export class AgentSession {
 		let expandedText = this._expandSkillCommand(text);
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
-		await this._queueFollowUp(expandedText, images);
+		await this._queueFollowUp(expandedText, attachments);
 	}
 
 	/**
 	 * Internal: Queue a steering message (already expanded, no extension command check).
 	 */
-	private async _queueSteer(text: string, images?: ImageContent[]): Promise<void> {
+	private async _queueSteer(text: string, attachments?: MediaContent[]): Promise<void> {
 		this._steeringMessages.push(text);
 		this._emitQueueUpdate();
-		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
-		if (images) {
-			content.push(...images);
+		const content: (TextContent | MediaContent)[] = [{ type: "text", text }];
+		if (attachments) {
+			content.push(...attachments);
 		}
 		this.agent.steer({
 			role: "user",
@@ -1344,12 +1356,12 @@ export class AgentSession {
 	/**
 	 * Internal: Queue a follow-up message (already expanded, no extension command check).
 	 */
-	private async _queueFollowUp(text: string, images?: ImageContent[]): Promise<void> {
+	private async _queueFollowUp(text: string, attachments?: MediaContent[]): Promise<void> {
 		this._followUpMessages.push(text);
 		this._emitQueueUpdate();
-		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
-		if (images) {
-			content.push(...images);
+		const content: (TextContent | MediaContent)[] = [{ type: "text", text }];
+		if (attachments) {
+			content.push(...attachments);
 		}
 		this.agent.followUp({
 			role: "user",
@@ -1429,34 +1441,34 @@ export class AgentSession {
 	 * @param options.deliverAs Delivery mode when streaming: "steer" or "followUp"
 	 */
 	async sendUserMessage(
-		content: string | (TextContent | ImageContent)[],
+		content: string | (TextContent | MediaContent)[],
 		options?: { deliverAs?: "steer" | "followUp" },
 	): Promise<void> {
-		// Normalize content to text string + optional images
+		// Normalize content to text string + optional attachments
 		let text: string;
-		let images: ImageContent[] | undefined;
+		let attachments: MediaContent[] | undefined;
 
 		if (typeof content === "string") {
 			text = content;
 		} else {
 			const textParts: string[] = [];
-			images = [];
+			attachments = [];
 			for (const part of content) {
 				if (part.type === "text") {
 					textParts.push(part.text);
 				} else {
-					images.push(part);
+					attachments.push(part);
 				}
 			}
 			text = textParts.join("\n");
-			if (images.length === 0) images = undefined;
+			if (attachments.length === 0) attachments = undefined;
 		}
 
 		// Use prompt() with expandPromptTemplates: false to skip command handling and template expansion
 		await this.prompt(text, {
 			expandPromptTemplates: false,
 			streamingBehavior: options?.deliverAs,
-			images,
+			attachments,
 			source: "extension",
 		});
 	}

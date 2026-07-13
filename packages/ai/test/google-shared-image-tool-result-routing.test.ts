@@ -82,7 +82,7 @@ describe("google-shared image tool result routing", () => {
 
 		expect(contents).toHaveLength(5);
 		expect(contents[2].parts?.every((part) => part.functionResponse)).toBe(true);
-		expect(contents[3].parts?.[0]?.text).toBe("Tool result image:");
+		expect(contents[3].parts?.[0]?.text).toBe("Tool result media:");
 		expect(contents[3].parts?.[1]?.inlineData).toBeTruthy();
 		expect(contents[4].parts?.[0]?.functionResponse).toBeTruthy();
 	});

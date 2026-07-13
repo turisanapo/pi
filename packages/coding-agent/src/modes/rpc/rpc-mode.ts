@@ -12,6 +12,7 @@
  */
 
 import * as crypto from "node:crypto";
+import type { ImageContent, MediaContent } from "@earendil-works/pi-ai";
 import type { AgentSessionRuntime } from "../../core/agent-session-runtime.ts";
 import type {
 	ExtensionUIContext,
@@ -382,6 +383,12 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 	registerSignalHandlers();
 
 	// Handle a single command
+	// `images` is a deprecated alias for `attachments`; merge both, alias first.
+	const mergeAttachments = (command: { attachments?: MediaContent[]; images?: ImageContent[] }) => {
+		if (!command.images && !command.attachments) return undefined;
+		return [...(command.images ?? []), ...(command.attachments ?? [])];
+	};
+
 	const handleCommand = async (command: RpcCommand): Promise<RpcResponse | undefined> => {
 		const id = command.id;
 
@@ -396,7 +403,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				let preflightSucceeded = false;
 				void session
 					.prompt(command.message, {
-						images: command.images,
+						attachments: mergeAttachments(command),
 						streamingBehavior: command.streamingBehavior,
 						source: "rpc",
 						preflightResult: (didSucceed) => {
@@ -415,12 +422,12 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			}
 
 			case "steer": {
-				await session.steer(command.message, command.images);
+				await session.steer(command.message, mergeAttachments(command));
 				return success(id, "steer");
 			}
 
 			case "follow_up": {
-				await session.followUp(command.message, command.images);
+				await session.followUp(command.message, mergeAttachments(command));
 				return success(id, "follow_up");
 			}
 

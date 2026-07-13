@@ -3,7 +3,7 @@
  */
 
 import { type Content, FinishReason, FunctionCallingConfigMode, type Part } from "@google/genai";
-import type { Context, ImageContent, Model, StopReason, TextContent, Tool } from "../types.ts";
+import type { Context, MediaContent, Model, StopReason, TextContent, Tool } from "../types.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { transformMessages } from "./transform-messages.ts";
 
@@ -174,28 +174,27 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 				parts,
 			});
 		} else if (msg.role === "toolResult") {
-			// Extract text and image content
+			// Extract text and media content. Unsupported media was already downgraded
+			// to text placeholders in transformMessages, so anything left is supported.
 			const textContent = msg.content.filter((c): c is TextContent => c.type === "text");
 			const textResult = textContent.map((c) => c.text).join("\n");
-			const imageContent = model.input.includes("image")
-				? msg.content.filter((c): c is ImageContent => c.type === "image")
-				: [];
+			const mediaContent = msg.content.filter((c): c is MediaContent => c.type !== "text");
 
 			const hasText = textResult.length > 0;
-			const hasImages = imageContent.length > 0;
+			const hasMedia = mediaContent.length > 0;
 
-			// Gemini 3+ models support multimodal function responses with images nested inside
+			// Gemini 3+ models support multimodal function responses with media nested inside
 			// functionResponse.parts. Claude and other non-Gemini models behind Cloud Code Assist /
-			// Gemini < 3 still needs a separate user image turn.
+			// Gemini < 3 still needs a separate user media turn.
 			const modelSupportsMultimodalFunctionResponse = supportsMultimodalFunctionResponse(model.id);
 
 			// Use "output" key for success, "error" key for errors as per SDK documentation
-			const responseValue = hasText ? sanitizeSurrogates(textResult) : hasImages ? "(see attached image)" : "";
+			const responseValue = hasText ? sanitizeSurrogates(textResult) : hasMedia ? "(see attached media)" : "";
 
-			const imageParts: Part[] = imageContent.map((imageBlock) => ({
+			const mediaParts: Part[] = mediaContent.map((mediaBlock) => ({
 				inlineData: {
-					mimeType: imageBlock.mimeType,
-					data: imageBlock.data,
+					mimeType: mediaBlock.mimeType,
+					data: mediaBlock.data,
 				},
 			}));
 
@@ -204,7 +203,7 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 				functionResponse: {
 					name: msg.toolName,
 					response: msg.isError ? { error: responseValue } : { output: responseValue },
-					...(hasImages && modelSupportsMultimodalFunctionResponse && { parts: imageParts }),
+					...(hasMedia && modelSupportsMultimodalFunctionResponse && { parts: mediaParts }),
 					...(includeId ? { id: msg.toolCallId } : {}),
 				},
 			};
@@ -221,11 +220,11 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 				});
 			}
 
-			// For Gemini < 3, add images in a separate user message
-			if (hasImages && !modelSupportsMultimodalFunctionResponse) {
+			// For Gemini < 3, add media in a separate user message
+			if (hasMedia && !modelSupportsMultimodalFunctionResponse) {
 				contents.push({
 					role: "user",
-					parts: [{ text: "Tool result image:" }, ...imageParts],
+					parts: [{ text: "Tool result media:" }, ...mediaParts],
 				});
 			}
 		}

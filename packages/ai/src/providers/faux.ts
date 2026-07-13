@@ -3,7 +3,7 @@ import type {
 	AssistantMessage,
 	AssistantMessageEventStream,
 	Context,
-	ImageContent,
+	MediaContent,
 	Message,
 	Model,
 	SimpleStreamOptions,
@@ -145,7 +145,7 @@ function randomId(prefix: string): string {
 	return `${prefix}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 }
 
-function contentToText(content: string | Array<TextContent | ImageContent>): string {
+function contentToText(content: string | Array<TextContent | MediaContent>): string {
 	if (typeof content === "string") {
 		return content;
 	}
@@ -154,7 +154,7 @@ function contentToText(content: string | Array<TextContent | ImageContent>): str
 			if (block.type === "text") {
 				return block.text;
 			}
-			return `[image:${block.mimeType}:${block.data.length}]`;
+			return `[${block.type}:${block.mimeType}:${block.data.length}]`;
 		})
 		.join("\n");
 }
