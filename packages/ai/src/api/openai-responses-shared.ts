@@ -42,8 +42,6 @@ import { transformMessages } from "./transform-messages.ts";
 /** Formats accepted by the official OpenAI `input_audio` content part. */
 const INPUT_AUDIO_FORMATS: Record<string, "wav" | "mp3"> = {
 	"audio/wav": "wav",
-	"audio/x-wav": "wav",
-	"audio/wave": "wav",
 	"audio/mp3": "mp3",
 	"audio/mpeg": "mp3",
 };
@@ -53,14 +51,14 @@ function mediaToInputContent(block: MediaContent): ResponseInputContent {
 	// input_video (and input_audio with a URL payload) are OpenAI-compatible
 	// extensions (vLLM, Ollama) — the API forwards unknown part types unchanged.
 	if (block.type === "video") {
-		return { type: "input_video", video_url: dataUrl } as unknown as ResponseInputContent;
+		return { type: "input_video", video_url: dataUrl } as any;
 	}
 	if (block.type === "audio") {
-		const format = INPUT_AUDIO_FORMATS[block.mimeType.toLowerCase()];
+		const format = INPUT_AUDIO_FORMATS[block.mimeType];
 		if (format) {
-			return { type: "input_audio", input_audio: { data: block.data, format } } as unknown as ResponseInputContent;
+			return { type: "input_audio", input_audio: { data: block.data, format } } as any;
 		}
-		return { type: "input_audio", audio_url: dataUrl } as unknown as ResponseInputContent;
+		return { type: "input_audio", audio_url: dataUrl } as any;
 	}
 	return {
 		type: "input_image",

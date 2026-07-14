@@ -35,7 +35,7 @@ function replaceUnsupportedMediaWithPlaceholder(
 	for (const block of content) {
 		// Unknown block types from untyped callers pass through; providers skip them.
 		const placeholders = block.type !== "text" ? MEDIA_PLACEHOLDERS[block.type] : undefined;
-		if (placeholders && !supported.includes(block.type as MediaContent["type"])) {
+		if (placeholders && !supported.includes(block.type)) {
 			const placeholder = placeholders[kind];
 			if (previousPlaceholder !== placeholder) {
 				result.push({ type: "text", text: placeholder });

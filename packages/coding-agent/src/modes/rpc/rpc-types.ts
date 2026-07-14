@@ -17,34 +17,18 @@ import type { SourceInfo } from "../../core/source-info.ts";
 // RPC Commands (stdin)
 // ============================================================================
 
+/** Media attachments for prompting commands. `images` is a deprecated alias for `attachments`; both are merged. */
+export interface PromptAttachments {
+	attachments?: MediaContent[];
+	/** @deprecated Use `attachments`. */
+	images?: ImageContent[];
+}
+
 export type RpcCommand =
-	// Prompting. `attachments` carries image, video, and audio content blocks;
-	// `images` is a deprecated alias kept for wire compatibility — both are merged.
-	| {
-			id?: string;
-			type: "prompt";
-			message: string;
-			attachments?: MediaContent[];
-			/** @deprecated Use `attachments`. */
-			images?: ImageContent[];
-			streamingBehavior?: "steer" | "followUp";
-	  }
-	| {
-			id?: string;
-			type: "steer";
-			message: string;
-			attachments?: MediaContent[];
-			/** @deprecated Use `attachments`. */
-			images?: ImageContent[];
-	  }
-	| {
-			id?: string;
-			type: "follow_up";
-			message: string;
-			attachments?: MediaContent[];
-			/** @deprecated Use `attachments`. */
-			images?: ImageContent[];
-	  }
+	// Prompting
+	| ({ id?: string; type: "prompt"; message: string; streamingBehavior?: "steer" | "followUp" } & PromptAttachments)
+	| ({ id?: string; type: "steer"; message: string } & PromptAttachments)
+	| ({ id?: string; type: "follow_up"; message: string } & PromptAttachments)
 	| { id?: string; type: "abort" }
 	| { id?: string; type: "new_session"; parentSession?: string }
 

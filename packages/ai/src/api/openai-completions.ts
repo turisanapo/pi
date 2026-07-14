@@ -96,8 +96,6 @@ function isMediaContentBlock(block: { type: string }): block is MediaContent {
 /** Formats accepted by the official OpenAI `input_audio` content part. */
 const INPUT_AUDIO_FORMATS: Record<string, "wav" | "mp3"> = {
 	"audio/wav": "wav",
-	"audio/x-wav": "wav",
-	"audio/wave": "wav",
 	"audio/mp3": "mp3",
 	"audio/mpeg": "mp3",
 };
@@ -107,14 +105,14 @@ function mediaToContentPart(block: MediaContent): ChatCompletionContentPart {
 	// video_url/audio_url are OpenAI-compatible extensions (vLLM, Ollama, SGLang)
 	// for multimodal models; the SDK forwards unknown part types unchanged.
 	if (block.type === "video") {
-		return { type: "video_url", video_url: { url: dataUrl } } as unknown as ChatCompletionContentPart;
+		return { type: "video_url", video_url: { url: dataUrl } } as any;
 	}
 	if (block.type === "audio") {
-		const format = INPUT_AUDIO_FORMATS[block.mimeType.toLowerCase()];
+		const format = INPUT_AUDIO_FORMATS[block.mimeType];
 		if (format) {
 			return { type: "input_audio", input_audio: { data: block.data, format } };
 		}
-		return { type: "audio_url", audio_url: { url: dataUrl } } as unknown as ChatCompletionContentPart;
+		return { type: "audio_url", audio_url: { url: dataUrl } } as any;
 	}
 	return { type: "image_url", image_url: { url: dataUrl } } satisfies ChatCompletionContentPartImage;
 }
