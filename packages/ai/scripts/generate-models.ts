@@ -228,12 +228,9 @@ const OPENAI_LONG_CONTEXT_PRICING_MODEL_IDS = new Set([
 	"gpt-5.6-luna",
 ]);
 
+// Catalog data lists modalities pi doesn't model (e.g. "pdf"); keep only the known ones.
 function parseInputModalities(modalities: string[] | undefined): Model<Api>["input"] {
-	const input: Model<Api>["input"] = ["text"];
-	for (const modality of ["image", "video", "audio"] as const) {
-		if (modalities?.includes(modality)) input.push(modality);
-	}
-	return input;
+	return ["text", ...(["image", "video", "audio"] as const).filter((m) => modalities?.includes(m))];
 }
 
 function withOpenAiLongContextPricing(cost: Model<Api>["cost"]): Model<Api>["cost"] {
