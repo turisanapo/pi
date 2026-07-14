@@ -716,7 +716,7 @@ async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 
 			modelKey = model.id; // Keep full ID for OpenRouter
 
-			// Parse input modalities (architecture.modality is e.g. "text+image->text")
+			// Parse input modalities
 			const input: Model<Api>["input"] = ["text"];
 			for (const modality of ["image", "video", "audio"] as const) {
 				if (model.architecture?.modality?.includes(modality)) input.push(modality);

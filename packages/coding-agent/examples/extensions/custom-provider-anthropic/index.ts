@@ -189,8 +189,7 @@ function sanitizeSurrogates(text: string): string {
 function convertContentBlocks(
 	content: (TextContent | MediaContent)[],
 ): string | Array<{ type: "text"; text: string } | { type: "image"; source: any }> {
-	// Video/audio blocks are downgraded to text placeholders before conversion,
-	// so only text and images reach here.
+	// transformMessages downgraded video/audio to placeholders; only text and images reach here.
 	const supported = content.filter((c): c is TextContent | ImageContent => c.type === "text" || c.type === "image");
 	const hasImages = supported.some((c) => c.type === "image");
 	if (!hasImages) {

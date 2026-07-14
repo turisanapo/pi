@@ -1070,8 +1070,7 @@ export function convertMessages(
 				}
 				params.push(toolResultMsg);
 
-				// Unsupported media was already downgraded to text placeholders in
-				// transformMessages, so anything left here is model-supported.
+				// Media surviving transformMessages' downgrade is model-supported.
 				for (const block of toolMsg.content) {
 					if (isMediaContentBlock(block)) {
 						mediaBlocks.push(mediaToContentPart(block));

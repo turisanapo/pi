@@ -255,8 +255,7 @@ export function convertResponsesMessages<TApi extends Api>(
 				.filter((c): c is TextContent => c.type === "text")
 				.map((c) => c.text)
 				.join("\n");
-			// Unsupported media was already downgraded to text placeholders in
-			// transformMessages, so anything left here is model-supported.
+			// Media surviving transformMessages' downgrade is model-supported.
 			const hasMedia = msg.content.some((c): c is MediaContent => c.type !== "text");
 			const hasText = textResult.length > 0;
 			const [callId] = msg.toolCallId.split("|");

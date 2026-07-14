@@ -382,7 +382,6 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 	await rebindSession();
 	registerSignalHandlers();
 
-	// `images` is a deprecated alias for `attachments`; merge both, alias first.
 	const mergeAttachments = (command: PromptAttachments) => {
 		if (!command.images && !command.attachments) return undefined;
 		return [...(command.images ?? []), ...(command.attachments ?? [])];

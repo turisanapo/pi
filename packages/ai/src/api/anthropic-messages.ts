@@ -126,8 +126,7 @@ function convertContentBlocks(content: (TextContent | MediaContent)[]):
 					};
 			  }
 	  > {
-	// Video/audio blocks are downgraded to text placeholders in transformMessages
-	// (no Anthropic model declares those capabilities), so only text and images reach here.
+	// transformMessages downgraded video/audio to placeholders; only text and images reach here.
 	const supported = content.filter((c): c is TextContent | ImageContent => c.type === "text" || c.type === "image");
 	// If only text blocks, return as concatenated string for simplicity
 	const hasImages = supported.some((c) => c.type === "image");

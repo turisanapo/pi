@@ -174,8 +174,7 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 				parts,
 			});
 		} else if (msg.role === "toolResult") {
-			// Extract text and media content. Unsupported media was already downgraded
-			// to text placeholders in transformMessages, so anything left is supported.
+			// Media surviving transformMessages' downgrade is model-supported.
 			const textContent = msg.content.filter((c): c is TextContent => c.type === "text");
 			const textResult = textContent.map((c) => c.text).join("\n");
 			const mediaContent = msg.content.filter((c): c is MediaContent => c.type !== "text");
