@@ -31,6 +31,7 @@ import {
 	calculateCost,
 	createAssistantMessageEventStream,
 	type ImageContent,
+	type MediaContent,
 	type Message,
 	type Model,
 	type OAuthCredentials,
@@ -186,14 +187,16 @@ function sanitizeSurrogates(text: string): string {
 }
 
 function convertContentBlocks(
-	content: (TextContent | ImageContent)[],
+	content: (TextContent | MediaContent)[],
 ): string | Array<{ type: "text"; text: string } | { type: "image"; source: any }> {
-	const hasImages = content.some((c) => c.type === "image");
+	// transformMessages downgraded video/audio to placeholders; only text and images reach here.
+	const supported = content.filter((c): c is TextContent | ImageContent => c.type === "text" || c.type === "image");
+	const hasImages = supported.some((c) => c.type === "image");
 	if (!hasImages) {
-		return sanitizeSurrogates(content.map((c) => (c as TextContent).text).join("\n"));
+		return sanitizeSurrogates(supported.map((c) => (c as TextContent).text).join("\n"));
 	}
 
-	const blocks = content.map((block) => {
+	const blocks = supported.map((block) => {
 		if (block.type === "text") {
 			return { type: "text" as const, text: sanitizeSurrogates(block.text) };
 		}

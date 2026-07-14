@@ -6,7 +6,7 @@
  */
 
 import type { AgentMessage, ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { ImageContent, Model } from "@earendil-works/pi-ai";
+import type { ImageContent, MediaContent, Model } from "@earendil-works/pi-ai";
 import type { SessionStats } from "../../core/agent-session.ts";
 import type { BashResult } from "../../core/bash-executor.ts";
 import type { CompactionResult } from "../../core/compaction/index.ts";
@@ -17,11 +17,18 @@ import type { SourceInfo } from "../../core/source-info.ts";
 // RPC Commands (stdin)
 // ============================================================================
 
+/** Media attachments for prompting commands. `images` is a deprecated alias for `attachments`; both are merged. */
+export interface PromptAttachments {
+	attachments?: MediaContent[];
+	/** @deprecated Use `attachments`. */
+	images?: ImageContent[];
+}
+
 export type RpcCommand =
 	// Prompting
-	| { id?: string; type: "prompt"; message: string; images?: ImageContent[]; streamingBehavior?: "steer" | "followUp" }
-	| { id?: string; type: "steer"; message: string; images?: ImageContent[] }
-	| { id?: string; type: "follow_up"; message: string; images?: ImageContent[] }
+	| ({ id?: string; type: "prompt"; message: string; streamingBehavior?: "steer" | "followUp" } & PromptAttachments)
+	| ({ id?: string; type: "steer"; message: string } & PromptAttachments)
+	| ({ id?: string; type: "follow_up"; message: string } & PromptAttachments)
 	| { id?: string; type: "abort" }
 	| { id?: string; type: "new_session"; parentSession?: string }
 

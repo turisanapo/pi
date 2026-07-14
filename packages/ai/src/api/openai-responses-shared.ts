@@ -19,7 +19,7 @@ import type {
 	Api,
 	AssistantMessage,
 	Context,
-	ImageContent,
+	MediaContent,
 	Model,
 	StopReason,
 	TextContent,
@@ -38,6 +38,34 @@ import { transformMessages } from "./transform-messages.ts";
 // =============================================================================
 // Utilities
 // =============================================================================
+
+/** Formats accepted by the official OpenAI `input_audio` content part. */
+const INPUT_AUDIO_FORMATS: Record<string, "wav" | "mp3"> = {
+	"audio/wav": "wav",
+	"audio/mp3": "mp3",
+	"audio/mpeg": "mp3",
+};
+
+function mediaToInputContent(block: MediaContent): ResponseInputContent {
+	const dataUrl = `data:${block.mimeType};base64,${block.data}`;
+	// input_video (and input_audio with a URL payload) are OpenAI-compatible
+	// extensions (vLLM, Ollama) — the API forwards unknown part types unchanged.
+	if (block.type === "video") {
+		return { type: "input_video", video_url: dataUrl } as any;
+	}
+	if (block.type === "audio") {
+		const format = INPUT_AUDIO_FORMATS[block.mimeType];
+		if (format) {
+			return { type: "input_audio", input_audio: { data: block.data, format } } as any;
+		}
+		return { type: "input_audio", audio_url: dataUrl } as any;
+	}
+	return {
+		type: "input_image",
+		detail: "auto",
+		image_url: dataUrl,
+	} satisfies ResponseInputImage;
+}
 
 function encodeTextSignatureV1(id: string, phase?: TextSignatureV1["phase"]): string {
 	const payload: TextSignatureV1 = { v: 1, id };
@@ -155,11 +183,7 @@ export function convertResponsesMessages<TApi extends Api>(
 							text: sanitizeSurrogates(item.text),
 						} satisfies ResponseInputText;
 					}
-					return {
-						type: "input_image",
-						detail: "auto",
-						image_url: `data:${item.mimeType};base64,${item.data}`,
-					} satisfies ResponseInputImage;
+					return mediaToInputContent(item);
 				});
 				if (content.length === 0) continue;
 				messages.push({
@@ -231,12 +255,13 @@ export function convertResponsesMessages<TApi extends Api>(
 				.filter((c): c is TextContent => c.type === "text")
 				.map((c) => c.text)
 				.join("\n");
-			const hasImages = msg.content.some((c): c is ImageContent => c.type === "image");
+			// Media surviving transformMessages' downgrade is model-supported.
+			const hasMedia = msg.content.some((c): c is MediaContent => c.type !== "text");
 			const hasText = textResult.length > 0;
 			const [callId] = msg.toolCallId.split("|");
 
 			let output: string | ResponseFunctionCallOutputItemList;
-			if (hasImages && model.input.includes("image")) {
+			if (hasMedia) {
 				const contentParts: ResponseFunctionCallOutputItemList = [];
 
 				if (hasText) {
@@ -247,18 +272,14 @@ export function convertResponsesMessages<TApi extends Api>(
 				}
 
 				for (const block of msg.content) {
-					if (block.type === "image") {
-						contentParts.push({
-							type: "input_image",
-							detail: "auto",
-							image_url: `data:${block.mimeType};base64,${block.data}`,
-						});
+					if (block.type !== "text") {
+						contentParts.push(mediaToInputContent(block) as ResponseFunctionCallOutputItemList[number]);
 					}
 				}
 
 				output = contentParts;
 			} else {
-				output = sanitizeSurrogates(hasText ? textResult : hasImages ? "(see attached image)" : "(no tool output)");
+				output = sanitizeSurrogates(hasText ? textResult : "(no tool output)");
 			}
 
 			messages.push({

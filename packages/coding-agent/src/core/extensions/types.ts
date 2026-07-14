@@ -20,7 +20,7 @@ import type {
 	AssistantMessageEvent,
 	AssistantMessageEventStream,
 	Context,
-	ImageContent,
+	MediaContent,
 	Model,
 	OAuthCredentials,
 	OAuthLoginCallbacks,
@@ -386,7 +386,7 @@ export interface ReplacedSessionContext extends ExtensionCommandContext {
 	): Promise<void>;
 
 	sendUserMessage(
-		content: string | (TextContent | ImageContent)[],
+		content: string | (TextContent | MediaContent)[],
 		options?: { deliverAs?: "steer" | "followUp" },
 	): Promise<void>;
 }
@@ -686,8 +686,8 @@ export interface BeforeAgentStartEvent {
 	type: "before_agent_start";
 	/** The raw user prompt text (after expansion). */
 	prompt: string;
-	/** Images attached to the user prompt, if any. */
-	images?: ImageContent[];
+	/** Media attached to the user prompt, if any. */
+	images?: MediaContent[];
 	/** The fully assembled system prompt string. */
 	systemPrompt: string;
 	/** Structured options used to build the system prompt. Extensions can inspect this to understand what Pi loaded without re-discovering resources. */
@@ -818,8 +818,8 @@ export interface InputEvent {
 	type: "input";
 	/** The input text */
 	text: string;
-	/** Attached images, if any */
-	images?: ImageContent[];
+	/** Attached media (image, video, audio), if any */
+	images?: MediaContent[];
 	/** Where the input came from */
 	source: InputSource;
 	/** How the input will be delivered during streaming, or undefined when idle */
@@ -829,7 +829,7 @@ export interface InputEvent {
 /** Result from input event handler */
 export type InputEventResult =
 	| { action: "continue" }
-	| { action: "transform"; text: string; images?: ImageContent[] }
+	| { action: "transform"; text: string; images?: MediaContent[] }
 	| { action: "handled" };
 
 // ============================================================================
@@ -901,7 +901,7 @@ interface ToolResultEventBase {
 	type: "tool_result";
 	toolCallId: string;
 	input: Record<string, unknown>;
-	content: (TextContent | ImageContent)[];
+	content: (TextContent | MediaContent)[];
 	isError: boolean;
 }
 
@@ -1067,7 +1067,7 @@ export interface UserBashEventResult {
 }
 
 export interface ToolResultEventResult {
-	content?: (TextContent | ImageContent)[];
+	content?: (TextContent | MediaContent)[];
 	details?: unknown;
 	isError?: boolean;
 }
@@ -1273,7 +1273,7 @@ export interface ExtensionAPI {
 	 * When the agent is streaming, use deliverAs to specify how to queue the message.
 	 */
 	sendUserMessage(
-		content: string | (TextContent | ImageContent)[],
+		content: string | (TextContent | MediaContent)[],
 		options?: { deliverAs?: "steer" | "followUp" },
 	): void;
 
@@ -1450,7 +1450,7 @@ export interface ProviderModelConfig {
 	/** Maps pi thinking levels to provider/model-specific values; null marks a level unsupported. */
 	thinkingLevelMap?: Model<Api>["thinkingLevelMap"];
 	/** Supported input types. */
-	input: ("text" | "image")[];
+	input: Model<Api>["input"];
 	/** Per-million-token cost rates and optional request-wide input pricing tiers. */
 	cost: Model<Api>["cost"];
 	/** Maximum context window size in tokens. */
@@ -1506,7 +1506,7 @@ export type SendMessageHandler = <T = unknown>(
 ) => void;
 
 export type SendUserMessageHandler = (
-	content: string | (TextContent | ImageContent)[],
+	content: string | (TextContent | MediaContent)[],
 	options?: { deliverAs?: "steer" | "followUp" },
 ) => void;
 
