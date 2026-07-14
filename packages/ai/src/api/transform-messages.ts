@@ -28,7 +28,7 @@ function replaceUnsupportedMediaWithPlaceholder(
 	content: (TextContent | MediaContent)[],
 	supported: Model<Api>["input"],
 	kind: "user" | "tool",
-): (TextContent | MediaContent)[] {
+) {
 	const result: (TextContent | MediaContent)[] = [];
 	let previousPlaceholder: string | null = null;
 

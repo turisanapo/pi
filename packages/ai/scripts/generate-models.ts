@@ -229,7 +229,7 @@ const OPENAI_LONG_CONTEXT_PRICING_MODEL_IDS = new Set([
 ]);
 
 // Catalog data lists modalities pi doesn't model (e.g. "pdf"); keep only the known ones.
-function parseInputModalities(modalities: string[] | undefined): Model<Api>["input"] {
+function parseInputModalities(modalities: string[] | undefined) {
 	return ["text", ...(["image", "video", "audio"] as const).filter((m) => modalities?.includes(m))];
 }
 
