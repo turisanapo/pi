@@ -35,11 +35,6 @@ const MCP_RESOURCE_TOOLS: ReadonlySet<string> = new Set([
 	READ_MCP_RESOURCE_TOOL,
 ]);
 
-/** Whether a tool comes from MCP: a server tool (`mcp__<server>__<tool>`) or a resource tool. */
-export function isMcpToolName(name: string): boolean {
-	return name.startsWith("mcp__") || MCP_RESOURCE_TOOLS.has(name);
-}
-
 /**
  * - `codemode`: tools are callable from codemode scripts but neither declared to the model nor
  *   listed in the codemode description, which lists only the server's namespace. Scripts find them
@@ -151,9 +146,28 @@ export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
 
 const SERVER_NAME = /^[A-Za-z0-9_-]+$/;
 
+const MCP_PREFIX = "mcp__";
+
 /** Namespace of a server's tools: `mcp__<server>` with `-` replaced by `_`, like the tool names. */
 export function mcpNamespace(server: string): string {
-	return `mcp__${server.replace(/-/g, "_")}`;
+	return `${MCP_PREFIX}${server.replace(/-/g, "_")}`;
+}
+
+/** Whether `value` starts with `mcp__`, the prefix of MCP tool names and MCP server namespaces. */
+export function hasMcpPrefix(value: string): boolean {
+	return value.startsWith(MCP_PREFIX);
+}
+
+/**
+ * Whether a tool comes from MCP: its name or its namespace (see {@link mcpNamespace}) starts with `mcp__`,
+ * or it is a resource tool.
+ */
+export function isMcpTool(tool: { name: string; namespace?: { name: string } }): boolean {
+	return (
+		hasMcpPrefix(tool.name) ||
+		(tool.namespace !== undefined && hasMcpPrefix(tool.namespace.name)) ||
+		MCP_RESOURCE_TOOLS.has(tool.name)
+	);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

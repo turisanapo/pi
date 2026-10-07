@@ -159,7 +159,7 @@ See [`hello.ts`](../examples/extensions/hello.ts), [`todo.ts`](../examples/exten
 - `deferred`: like `codemode`, but codemode tools do not list it; `tool_search` can find and activate it.
 - `hidden`: registered but unreachable. Re-register a tool with `exposure: "hidden"` to withdraw it, since tools cannot be unregistered.
 
-`namespace: { name, description, instructions }` groups related tools, as MCP servers do. Codemode tools list a namespace under one heading with its `description`. `instructions` holds longer usage guidance; it is not listed, and codemode scripts read it with `describeNamespace(name)`.
+`namespace: { name, description, instructions }` groups related tools, as MCP servers do. Codemode tools list a namespace under one heading with its `description`. `instructions` holds longer usage guidance; it is not listed, and codemode scripts read it with `describeNamespace(name)`. `--tools` treats a tool as an MCP tool when its name or its namespace starts with `mcp__` (see [MCP tools](cli.md#mcp-tools)).
 
 Registering a `direct` or `model-only` tool activates it; the other exposures are not activated on registration. The active set (`pi.getActiveTools()`, `pi.setActiveTools()`) is the set of tools declared to the model. `pi.getAllTools()` reports each tool's `exposure`, `namespace`, and `annotations`.
 

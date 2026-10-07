@@ -113,7 +113,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
-import { createToolNameMatcher, isMcpToolName } from "./mcp-servers.ts";
+import { createToolNameMatcher, hasMcpPrefix, isMcpTool } from "./mcp-servers.ts";
 import { type BashExecutionMessage, type CustomMessage, convertToLlm } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
@@ -278,9 +278,9 @@ export interface AgentSessionConfig {
 	defaultToolModifiers?: string[];
 	/**
 	 * Optional allowlist of tool names or patterns (`*` matches any characters). When provided, only
-	 * matching tools are exposed. A non-empty list without `mcp__` entries also keeps MCP tools
-	 * registered for codemode and tool_search; only tool_search can declare them. An empty list
-	 * exposes no tools.
+	 * matching tools are exposed. A non-empty list without `mcp__` entries also keeps MCP tools (tools
+	 * with an `mcp__` name or namespace and the MCP resource tools) registered for codemode and
+	 * tool_search; only tool_search can declare them. An empty list exposes no tools.
 	 */
 	allowedToolNames?: string[];
 	/** Optional denylist of tool names or patterns. When provided, matching tools are not exposed. */
@@ -441,8 +441,9 @@ export class AgentSession {
 	private _initialActiveToolNames?: string[];
 	/**
 	 * Tools of the restored or reloaded loadout that are not registered yet, such as tools of MCP
-	 * servers that are still connecting. They are activated when they are registered, and dropped when
-	 * `setActiveToolsByName()` deactivates a tool or the next agent run starts.
+	 * servers that are still connecting. They are activated when they register and `--tools` and
+	 * `--exclude-tools` allow them, and dropped when `setActiveToolsByName()` deactivates a tool or the
+	 * next agent run starts.
 	 */
 	private _pendingToolNames = new Set<string>();
 	private _usesDefaultTools: boolean;
@@ -450,8 +451,8 @@ export class AgentSession {
 	/** Matches the `--tools` entries: tool names or patterns. */
 	private _allowedTools?: (name: string) => boolean;
 	/**
-	 * Whether the allowlist filters MCP tools: it is empty (`--no-tools`) or names an MCP tool
-	 * (`mcp__*`). Otherwise it keeps MCP tools registered for codemode and tool_search.
+	 * Whether the allowlist filters MCP tools: it is empty (`--no-tools`) or has an entry that starts
+	 * with `mcp__`. Otherwise it keeps MCP tools registered for codemode and tool_search.
 	 */
 	private _allowlistFiltersMcp = false;
 	private _excludedTools?: (name: string) => boolean;
@@ -501,8 +502,7 @@ export class AgentSession {
 		this._defaultToolModifiers = config.defaultToolModifiers ?? [];
 		if (config.allowedToolNames) {
 			this._allowedTools = createToolNameMatcher(config.allowedToolNames);
-			this._allowlistFiltersMcp =
-				config.allowedToolNames.length === 0 || config.allowedToolNames.some((entry) => entry.startsWith("mcp__"));
+			this._allowlistFiltersMcp = config.allowedToolNames.length === 0 || config.allowedToolNames.some(hasMcpPrefix);
 		}
 		this._excludedTools = config.excludedToolNames ? createToolNameMatcher(config.excludedToolNames) : undefined;
 		this._baseToolsOverride = config.baseToolsOverride;
@@ -1532,10 +1532,10 @@ export class AgentSession {
 	 * Whether `--tools` and `--exclude-tools` keep the tool registered. MCP tools stay registered
 	 * unless the allowlist filters them (see `_allowlistFiltersMcp`).
 	 */
-	private _isAllowedTool(name: string): boolean {
-		if (this._excludedTools?.(name)) return false;
-		if (!this._allowedTools || this._allowedTools(name)) return true;
-		return !this._allowlistFiltersMcp && isMcpToolName(name);
+	private _isAllowedTool(definition: ToolDefinition): boolean {
+		if (this._excludedTools?.(definition.name)) return false;
+		if (!this._allowedTools || this._allowedTools(definition.name)) return true;
+		return !this._allowlistFiltersMcp && isMcpTool(definition);
 	}
 
 	/**
@@ -1544,9 +1544,9 @@ export class AgentSession {
 	 * tool_search can load them (non-`direct` exposure and tool_search registered). This also applies
 	 * to tools restored from the transcript or set by extensions.
 	 */
-	private _isActivatable(name: string): boolean {
-		if (!this._allowedTools || this._allowedTools(name) || !isMcpToolName(name)) return true;
-		return this._getToolExposure(name) !== "direct" && this._toolRegistry.has("tool_search");
+	private _isActivatable(definition: ToolDefinition): boolean {
+		if (!this._allowedTools || this._allowedTools(definition.name) || !isMcpTool(definition)) return true;
+		return this._getToolExposure(definition.name) !== "direct" && this._toolRegistry.has("tool_search");
 	}
 
 	private _getToolExposure(name: string): ToolExposure {
@@ -1573,7 +1573,10 @@ export class AgentSession {
 	private _applyToolLoadout(toolNames: string[]): AgentTool[] {
 		const tools = [...new Set(toolNames)].flatMap((name) => {
 			const tool = this._toolRegistry.get(name);
-			return tool && this._getToolExposure(name) !== "hidden" && this._isActivatable(name) ? [tool] : [];
+			const definition = this._toolDefinitions.get(name)?.definition;
+			return tool && definition && this._getToolExposure(name) !== "hidden" && this._isActivatable(definition)
+				? [tool]
+				: [];
 		});
 		const hooks = tools.flatMap((tool) => {
 			const entry = this._toolDefinitions.get(tool.name);
@@ -1809,7 +1812,7 @@ export class AgentSession {
 		const current = getCurrentSystemMessage(this.sessionManager.buildSessionContext().messages);
 		if (!current) return;
 		const names = (current.toolsAdded ?? []).map((tool) => tool.name);
-		this._pendingToolNames = new Set(names.filter((name) => this._isAllowedTool(name)));
+		this._pendingToolNames = new Set(names);
 		this._setActiveTools(names);
 	}
 
@@ -3506,10 +3509,10 @@ export class AgentSession {
 				definition,
 				sourceInfo: createSyntheticSourceInfo(`<sdk:${definition.name}>`, { source: "sdk" }),
 			})),
-		].filter((tool) => this._isAllowedTool(tool.definition.name));
+		].filter((tool) => this._isAllowedTool(tool.definition));
 		const definitionRegistry = new Map<string, ToolDefinitionEntry>(
 			Array.from(this._baseToolDefinitions.entries())
-				.filter(([name]) => this._isAllowedTool(name))
+				.filter(([, definition]) => this._isAllowedTool(definition))
 				.map(([name, definition]) => [
 					name,
 					{
@@ -3545,7 +3548,7 @@ export class AgentSession {
 		const wrappedExtensionTools = wrapRegisteredTools(allCustomTools, runner);
 		const wrappedBuiltInTools = wrapRegisteredTools(
 			Array.from(this._baseToolDefinitions.values())
-				.filter((definition) => this._isAllowedTool(definition.name))
+				.filter((definition) => this._isAllowedTool(definition))
 				.map((definition) => ({
 					definition,
 					sourceInfo: createSyntheticSourceInfo(`${BUILTIN_PATH_PREFIX}${definition.name}`, {
@@ -3561,9 +3564,11 @@ export class AgentSession {
 		}
 		this._toolRegistry = toolRegistry;
 
-		const nextActiveToolNames = (
-			options?.activeToolNames ? [...options.activeToolNames] : [...previousActiveToolNames]
-		).filter((name) => this._isAllowedTool(name));
+		// `_setActiveTools()` drops names that are not registered, which includes those `--tools` and
+		// `--exclude-tools` do not allow.
+		const nextActiveToolNames = options?.activeToolNames
+			? [...options.activeToolNames]
+			: [...previousActiveToolNames];
 
 		if (allowedTools) {
 			for (const toolName of this._toolRegistry.keys()) {

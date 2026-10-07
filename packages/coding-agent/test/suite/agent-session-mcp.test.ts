@@ -135,6 +135,8 @@ describe("AgentSession MCP integration", () => {
 			excludedToolNames?: string[];
 			/** Session to continue. */
 			sessionManager?: SessionManager;
+			/** Restore the tools of the transcript at startup instead of starting with an initial tool list. */
+			restoreToolsFromTranscript?: boolean;
 			/** Whether to wait for `mcp__docs__search` to register. Default: true. */
 			waitForTools?: boolean;
 			extensionFactories?: ExtensionFactory[];
@@ -150,6 +152,7 @@ describe("AgentSession MCP integration", () => {
 			allowedToolNames,
 			excludedToolNames,
 			sessionManager,
+			restoreToolsFromTranscript,
 			waitForTools = true,
 			extensionFactories = [],
 			toolExposure,
@@ -175,7 +178,7 @@ describe("AgentSession MCP integration", () => {
 		// `builtInTools` are the built-in tools active at the start. The MCP extension activates codemode
 		// or tool_search.
 		const harness = await createHarness({
-			initialActiveToolNames: allowedToolNames ?? builtInTools ?? [],
+			initialActiveToolNames: restoreToolsFromTranscript ? undefined : (allowedToolNames ?? builtInTools ?? []),
 			allowedToolNames,
 			excludedToolNames,
 			sessionManager,
@@ -252,6 +255,71 @@ describe("AgentSession MCP integration", () => {
 		expect(harness.session.getActiveToolNames()).toEqual(["codemode"]);
 	});
 
+	// Regression: #10541.
+	it("keeps tools with an MCP namespace when --tools names no MCP tool", async () => {
+		const unprefixed: ExtensionFactory = (pi) => {
+			pi.registerTool({
+				name: "lookup",
+				label: "lookup",
+				description: "Look up a page.",
+				parameters: Type.Object({}),
+				namespace: { name: "mcp__wiki" },
+				exposure: "codemode",
+				execute: async () => ({ content: [], details: undefined }),
+			});
+		};
+		const { harness } = await setup("codemode", undefined, {
+			allowedToolNames: ["read", "codemode"],
+			extensionFactories: [unprefixed],
+		});
+
+		expect(harness.session.getAllTools().map((tool) => tool.name)).toContain("lookup");
+		expect(nestedToolNames(harness)).toContain("lookup");
+		expect(harness.session.getActiveToolNames()).toEqual(["read", "codemode"]);
+	});
+
+	it("removes tools with a namespace that is not an MCP namespace when --tools does not name them", async () => {
+		const other: ExtensionFactory = (pi) => {
+			pi.registerTool({
+				name: "lookup",
+				label: "lookup",
+				description: "Look up a page.",
+				parameters: Type.Object({}),
+				namespace: { name: "other" },
+				exposure: "codemode",
+				execute: async () => ({ content: [], details: undefined }),
+			});
+		};
+		const { harness } = await setup("codemode", undefined, {
+			allowedToolNames: ["read", "codemode"],
+			extensionFactories: [other],
+		});
+
+		expect(harness.session.getAllTools().map((tool) => tool.name)).not.toContain("lookup");
+		expect(nestedToolNames(harness)).not.toContain("lookup");
+	});
+
+	it("keeps tools with an mcp__ name and no namespace when --tools names no MCP tool", async () => {
+		const prefixed: ExtensionFactory = (pi) => {
+			pi.registerTool({
+				name: "mcp__x__y",
+				label: "mcp__x__y",
+				description: "Look up a page.",
+				parameters: Type.Object({}),
+				exposure: "codemode",
+				execute: async () => ({ content: [], details: undefined }),
+			});
+		};
+		const { harness } = await setup("codemode", undefined, {
+			allowedToolNames: ["read", "codemode"],
+			extensionFactories: [prefixed],
+		});
+
+		expect(harness.session.getAllTools().map((tool) => tool.name)).toContain("mcp__x__y");
+		expect(nestedToolNames(harness)).toContain("mcp__x__y");
+		expect(harness.session.getActiveToolNames()).toEqual(["read", "codemode"]);
+	});
+
 	it("removes MCP tools with --no-tools", async () => {
 		// The first prompt waits for servers with direct tools, so their tools would be registered by then.
 		const { harness, servers } = await setup("direct", undefined, { allowedToolNames: [], waitForTools: false });
@@ -284,6 +352,27 @@ describe("AgentSession MCP integration", () => {
 		// The transcript's loadout is restored without the MCP tools it declared.
 		expect(second.harness.session.getActiveToolNames()).toEqual([]);
 		expect(second.harness.session.getAllTools().map((tool) => tool.name)).toContain("mcp__docs__search");
+	});
+
+	it("does not activate excluded MCP tools restored from the transcript when they register", async () => {
+		const first = await setup("direct");
+		first.harness.setResponses([fauxAssistantMessage("one")]);
+		await first.harness.session.prompt("first");
+		expect(declaredToolNames(first.harness)).toEqual(
+			expect.arrayContaining(["mcp__docs__search", "mcp__docs__fail"]),
+		);
+
+		// The transcript's loadout is restored before the server connects.
+		const second = await setup("direct", undefined, {
+			excludedToolNames: ["mcp__docs__search"],
+			sessionManager: first.harness.sessionManager,
+			restoreToolsFromTranscript: true,
+			waitForTools: false,
+		});
+		await vi.waitFor(() => expect(second.harness.session.getActiveToolNames()).toContain("mcp__docs__fail"));
+
+		expect(second.harness.session.getActiveToolNames()).not.toContain("mcp__docs__search");
+		expect(second.harness.session.getAllTools().map((tool) => tool.name)).not.toContain("mcp__docs__search");
 	});
 
 	it("lets tool_search declare unnamed MCP tools when --tools names it", async () => {
