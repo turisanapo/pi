@@ -76,17 +76,18 @@ export interface McpToolCaller {
 }
 
 /**
- * `mcp__<server>__<tool>`, sanitized and shortened with a hash suffix when too long. Like Codex,
- * everything but `[A-Za-z0-9_]` becomes `_`, so the name is also the identifier codemode scripts
- * call it by. `isTaken` reports names used by a different MCP tool: sanitizing can map two tools to
- * one name (`a-b` and `a_b`), which then get the hash suffix.
+ * `mcp__<server>__<tool>`, or `<tool>` when `prefix` is false, sanitized and shortened with a hash
+ * suffix when too long. Like Codex, everything but `[A-Za-z0-9_]` becomes `_`, so the name is also
+ * the identifier codemode scripts call it by. `isTaken` reports names used by a different tool:
+ * sanitizing can map two tools to one name (`a-b` and `a_b`), which then get the hash suffix.
  */
 export function createMcpToolName(
 	server: string,
 	tool: string,
-	isTaken: (name: string) => boolean = () => false,
+	options: { prefix?: boolean; isTaken?: (name: string) => boolean } = {},
 ): string {
-	const name = `mcp__${server}__${tool}`.replace(/[^A-Za-z0-9_]/g, "_");
+	const { prefix = true, isTaken = () => false } = options;
+	const name = (prefix ? `mcp__${server}__${tool}` : tool).replace(/[^A-Za-z0-9_]/g, "_");
 	if (name.length <= MAX_TOOL_NAME_LENGTH && !isTaken(name)) return name;
 	const hash = createHash("sha256").update(`${server}\0${tool}`).digest("hex").slice(0, 8);
 	return `${name.slice(0, MAX_TOOL_NAME_LENGTH - hash.length - 1)}_${hash}`;

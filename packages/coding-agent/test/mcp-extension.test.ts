@@ -159,6 +159,21 @@ describe("MCP config", () => {
 		expect(trusted.errors).toContainEqual(expect.stringContaining("autoEnableCodemode must be a boolean"));
 	});
 
+	it("reads enableToolPrefix with project precedence and rejects other values", () => {
+		const paths = setup({ enableToolPrefix: false, mcpServers: {} }, { enableToolPrefix: true, mcpServers: {} });
+		expect(loadMcpConfig({ ...paths, projectTrusted: false }).enableToolPrefix).toBe(false);
+		expect(loadMcpConfig({ ...paths, projectTrusted: true }).enableToolPrefix).toBe(true);
+
+		const project = join(paths.cwd, ".pi", "mcp.json");
+		writeFileSync(project, JSON.stringify({ enableToolPrefix: "no", mcpServers: {} }));
+		const invalid = loadMcpConfig({ ...paths, projectTrusted: true });
+		expect(invalid.enableToolPrefix).toBe(false);
+		expect(invalid.errors).toEqual([`${project}: enableToolPrefix must be a boolean`]);
+
+		const unset = setup({ mcpServers: {} }, {});
+		expect(loadMcpConfig({ ...unset, projectTrusted: true }).enableToolPrefix).toBeUndefined();
+	});
+
 	it("validates the OAuth callback URL, scope, and client name", () => {
 		const paths = setup(
 			{
@@ -274,8 +289,20 @@ describe("MCP tools", () => {
 		expect(createMcpToolName("server", `${"x".repeat(100)}y`)).not.toBe(long);
 		// Names that sanitize to one already taken by another tool get a hash suffix.
 		const taken = createMcpToolName("s", "a_b");
-		const second = createMcpToolName("s", "a-b", (name) => name === taken);
+		const second = createMcpToolName("s", "a-b", { isTaken: (name) => name === taken });
 		expect(second).toMatch(/^mcp__s__a_b_[0-9a-f]{8}$/);
+	});
+
+	it("creates tool names without the server prefix", () => {
+		const unprefixed = { prefix: false };
+		expect(createMcpToolName("booking", "check_availability", unprefixed)).toBe("check_availability");
+		expect(createMcpToolName("booking", "get.item-v2", unprefixed)).toBe("get_item_v2");
+		expect(createMcpToolName("docs", "read", { ...unprefixed, isTaken: (name) => name === "read" })).toBe(
+			"read_e02b6020",
+		);
+		expect(createMcpToolName("server", "x".repeat(100), unprefixed)).toBe(
+			"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_9fc39f5e",
+		);
 	});
 
 	it("converts results, passing the CallToolResult to scripts and flagging errors", async () => {

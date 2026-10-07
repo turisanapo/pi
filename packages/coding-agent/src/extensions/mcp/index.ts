@@ -6,7 +6,8 @@
  * in `mcp.json` takes precedence over a registered server of the same name. Connections run in the
  * background: the first prompt waits only for servers with `direct` tools, and codemode scripts,
  * `tool_search`, and the resource tools wait for the servers they need when they run. Tools are
- * registered as `mcp__<server>__<tool>`. By default (`"exposure": "codemode"`) the tools are only
+ * registered as `mcp__<server>__<tool>`, or as `<tool>` when `enableToolPrefix` is false; a name
+ * another tool has gets a hash suffix. By default (`"exposure": "codemode"`) the tools are only
  * callable from codemode scripts, which keeps MCP tools out of the model's tool declarations and
  * the codemode description: scripts find the tools with `searchTools()` and the server instructions
  * with `describeNamespace()`. The codemode tool is activated for that unless `autoEnableCodemode` is
@@ -286,6 +287,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		/** Between session_start and session_shutdown. Registrations before that are read on session_start. */
 		let sessionActive = false;
 		let autoEnableCodemode = true;
+		let enableToolPrefix = true;
 		/** Whether the "codemode tools unreachable" warning was shown since the session started. */
 		let warnedUnreachable = false;
 		let pending: Promise<unknown> | undefined;
@@ -379,16 +381,32 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 			// Like Codex, all tools whose names sanitize to the same name get the hash suffix, so which
 			// one would keep the plain name does not depend on the order of the list.
 			const plain = [...new Set(connection.tools.map((tool) => tool.name))].map((tool) =>
-				createMcpToolName(server, tool),
+				createMcpToolName(server, tool, { prefix: enableToolPrefix }),
+			);
+			// Without the prefix, server tools can clash with tools this extension does not own.
+			const others = new Set(
+				enableToolPrefix
+					? []
+					: [
+							...RESOURCE_TOOL_NAMES,
+							...pi
+								.getAllTools()
+								.map((tool) => tool.name)
+								.filter((name) => !toolOwners.has(name)),
+						],
 			);
 			const assignName = (tool: string, owner: string) => {
-				const name = createMcpToolName(server, tool, (candidate) => {
-					const existing = toolOwners.get(candidate);
-					return (
-						(existing !== undefined && existing !== owner) ||
-						current.has(candidate) ||
-						plain.indexOf(candidate) !== plain.lastIndexOf(candidate)
-					);
+				const name = createMcpToolName(server, tool, {
+					prefix: enableToolPrefix,
+					isTaken: (candidate) => {
+						const existing = toolOwners.get(candidate);
+						return (
+							(existing !== undefined && existing !== owner) ||
+							current.has(candidate) ||
+							others.has(candidate) ||
+							plain.indexOf(candidate) !== plain.lastIndexOf(candidate)
+						);
+					},
 				});
 				toolOwners.set(name, owner);
 				current.add(name);
@@ -999,6 +1017,7 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 			configErrors = loaded.errors;
 			projectConfig = loaded.projectConfig;
 			autoEnableCodemode = loaded.autoEnableCodemode ?? true;
+			enableToolPrefix = loaded.enableToolPrefix ?? true;
 			warnedUnreachable = false;
 			waitedForStartup = false;
 			sessionCwd = ctx.cwd;

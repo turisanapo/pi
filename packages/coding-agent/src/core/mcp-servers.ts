@@ -24,6 +24,27 @@ export function createToolNameMatcher(entries: readonly string[]): (name: string
 	return (name) => names.has(name) || patterns.some((pattern) => pattern.test(name));
 }
 
+/** The fields of a tool definition that tell whether it is an MCP tool and which entries match it. */
+interface NamedTool {
+	name: string;
+	namespace?: { name: string };
+}
+
+/**
+ * Whether a tool matches any of the entries by its name or, when it has a namespace, by its full name
+ * `<namespace>__<name>`. A name that starts with `<namespace>__` is its own full name, so
+ * `mcp__docs__search` in namespace `mcp__docs` does not also match as `mcp__docs__mcp__docs__search`.
+ */
+export function createToolMatcher(entries: readonly string[]): (tool: NamedTool) => boolean {
+	const matches = createToolNameMatcher(entries);
+	return ({ name, namespace }) => {
+		if (matches(name)) return true;
+		if (!namespace) return false;
+		const prefix = `${namespace.name}__`;
+		return !name.startsWith(prefix) && matches(`${prefix}${name}`);
+	};
+}
+
 /** MCP resource tools, which reach every server with resources. */
 export const LIST_MCP_RESOURCES_TOOL = "list_mcp_resources";
 export const LIST_MCP_RESOURCE_TEMPLATES_TOOL = "list_mcp_resource_templates";
@@ -162,7 +183,7 @@ export function hasMcpPrefix(value: string): boolean {
  * Whether a tool comes from MCP: its name or its namespace (see {@link mcpNamespace}) starts with `mcp__`,
  * or it is a resource tool.
  */
-export function isMcpTool(tool: { name: string; namespace?: { name: string } }): boolean {
+export function isMcpTool(tool: NamedTool): boolean {
 	return (
 		hasMcpPrefix(tool.name) ||
 		(tool.namespace !== undefined && hasMcpPrefix(tool.namespace.name)) ||

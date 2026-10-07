@@ -137,6 +137,8 @@ pi --tools read,bash,codemode,'mcp__radius__*'
 
 The MCP resource tools (`list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`) count as MCP tools. To remove MCP tools, use `--exclude-tools 'mcp__*'` or [`--no-mcp`](#resource-options).
 
+These patterns also work when MCP tools do not have the server prefix (see [Name tools without the server prefix](mcp.md#name-tools-without-the-server-prefix)).
+
 | Built-in | Purpose |
 |---|---|
 | `read` | Read text files and supported images |

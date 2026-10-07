@@ -26,7 +26,9 @@
  * cannot use it, so a repository cannot pick where the credential goes.
  *
  * The top-level `autoEnableCodemode` (default true) activates the codemode tool when a server
- * with `codemode` exposure connects. A project value overrides the global one.
+ * with `codemode` exposure connects. The top-level `enableToolPrefix` (default true) names server
+ * tools `mcp__<server>__<tool>`; with false they keep the server's tool names. A project value of
+ * either overrides the global one.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -66,6 +68,8 @@ export interface LoadedMcpConfig {
 	servers: McpServerEntry[];
 	/** Activate the codemode tool when `codemode` servers connect. Default: true. */
 	autoEnableCodemode?: boolean;
+	/** Name server tools `mcp__<server>__<tool>` instead of `<tool>`. Default: true. */
+	enableToolPrefix?: boolean;
 	errors: string[];
 	/** The project `mcp.json` when the project is trusted, where `/mcp` saves project overrides. */
 	projectConfig?: string;
@@ -85,6 +89,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 interface McpConfigState {
 	servers: Map<string, McpServerEntry>;
 	autoEnableCodemode?: boolean;
+	enableToolPrefix?: boolean;
 	errors: string[];
 }
 
@@ -104,6 +109,8 @@ function readConfigFile(path: string, scope: "global" | "project", state: McpCon
 	}
 	if (typeof parsed.autoEnableCodemode === "boolean") state.autoEnableCodemode = parsed.autoEnableCodemode;
 	else if (parsed.autoEnableCodemode !== undefined) errors.push(`${path}: autoEnableCodemode must be a boolean`);
+	if (typeof parsed.enableToolPrefix === "boolean") state.enableToolPrefix = parsed.enableToolPrefix;
+	else if (parsed.enableToolPrefix !== undefined) errors.push(`${path}: enableToolPrefix must be a boolean`);
 	for (const [name, value] of Object.entries(parsed.mcpServers ?? {})) {
 		if (scope === "project" && isRecord(value) && isOverride(value)) {
 			const base = servers.get(name);
@@ -150,6 +157,7 @@ export function loadMcpConfig(options: { agentDir: string; cwd: string; projectT
 	return {
 		servers: [...state.servers.values()],
 		...(state.autoEnableCodemode === undefined ? {} : { autoEnableCodemode: state.autoEnableCodemode }),
+		...(state.enableToolPrefix === undefined ? {} : { enableToolPrefix: state.enableToolPrefix }),
 		errors: state.errors,
 		...(projectConfig ? { projectConfig } : {}),
 	};

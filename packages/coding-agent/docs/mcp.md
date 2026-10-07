@@ -74,7 +74,7 @@ Keep personal servers and servers with credentials in the user-level file. Use t
 
 ### Configuration rules
 
-- Server names may contain only letters, digits, `_`, and `-`. Tools are named `mcp__<server>__<tool>`, with every character other than letters, digits, and `_` replaced by `_`; tools of a server whose names then collide all get a hash suffix. Server names that differ only in `-` and `_` count as the same server: a second one is rejected, and a `mcp.json` server overrides a registered one.
+- Server names may contain only letters, digits, `_`, and `-`. Tools are named `mcp__<server>__<tool>`, or `<tool>` when `enableToolPrefix` is `false` (see [Name tools without the server prefix](#name-tools-without-the-server-prefix)). Pi replaces every character other than letters, digits, and `_` with `_`; tools whose names then collide all get a hash suffix. Server names that differ only in `-` and `_` count as the same server: a second one is rejected, and a `mcp.json` server overrides a registered one.
 - `type` is optional. A `command` selects stdio and a `url` selects streamable HTTP. When present, `type` must be `stdio`, `http`, or `streamable-http`.
 - `sse` is rejected. Servers that document an SSE endpoint often also provide streamable HTTP, commonly at `/mcp` instead of `/sse`.
 - `command` is one executable and `args` contains its arguments. It is not a shell command string.
@@ -188,7 +188,7 @@ Pi uses that document instead of discovery and trusts it as configured, so only 
 
 ## Control tool exposure
 
-Each server tool is registered as `mcp__<server>__<tool>`. The server's `exposure` determines how the model reaches it:
+Each server tool is registered as `mcp__<server>__<tool>`, or as `<tool>` when `enableToolPrefix` is `false`. The server's `exposure` determines how the model reaches it:
 
 | Exposure | Behavior | Typical use |
 |---|---|---|
@@ -232,6 +232,25 @@ To keep `codemode` active without MCP servers, add `"defaultTools": ["+codemode"
 Text results over 20 KB reach the model with their middle removed around a `…N chars truncated…` marker. The full text is saved to a temporary file named in the result. Codemode scripts receive the complete result and can reduce it before returning output to the model.
 
 Codemode scripts receive the complete MCP `CallToolResult`, including `content`, `structuredContent`, and `isError`. A result with `isError` resolves inside scripts but is reported as an error for direct calls. `image(result.content[0])` forwards an image block. Server instructions are not part of any tool description; scripts read them with `describeNamespace("mcp__<server>")`, which also returns the server's tool names.
+
+### Name tools without the server prefix
+
+To give server tools the names the server uses, set `"enableToolPrefix": false` beside `mcpServers`. The default is `true`. A project value overrides the user-level value.
+
+```json
+{
+  "enableToolPrefix": false,
+  "mcpServers": {
+    "booking": { "url": "https://booking.example.com/mcp", "exposure": "direct" }
+  }
+}
+```
+
+With `false`, the tool `check_availability` of `booking` is registered as `check_availability`, not as `mcp__booking__check_availability`. When another tool already has the name, for example the built-in `read` or a tool of another server, the server tool gets a hash suffix, such as `read_1a2b3c4d`. When two servers offer the same tool name, the server that connects first keeps the name. Pi does not check tools that other extensions register after the server connects.
+
+`--tools` and `--exclude-tools` entries also match a tool by its full name `mcp__<server>__<tool>`, so patterns such as `mcp__booking__*` work with either setting.
+
+The setting changes only tool names, not exposure: to let the model call `check_availability` without codemode or `tool_search`, give it `"exposure": "direct"`. The namespace `mcp__booking` and stored credentials do not change. A codemode script that calls an unprefixed tool by name does not wait for a server that is still connecting; call `searchTools()` first. A resumed session shows calls to unprefixed tools with the default display until their server connects.
 
 ## Use resources
 

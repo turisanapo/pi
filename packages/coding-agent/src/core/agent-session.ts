@@ -113,7 +113,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
-import { createToolNameMatcher, hasMcpPrefix, isMcpTool } from "./mcp-servers.ts";
+import { createToolMatcher, hasMcpPrefix, isMcpTool } from "./mcp-servers.ts";
 import { type BashExecutionMessage, type CustomMessage, convertToLlm } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
@@ -278,7 +278,8 @@ export interface AgentSessionConfig {
 	defaultToolModifiers?: string[];
 	/**
 	 * Optional allowlist of tool names or patterns (`*` matches any characters). When provided, only
-	 * matching tools are exposed. A non-empty list without `mcp__` entries also keeps MCP tools (tools
+	 * matching tools are exposed. Entries match a tool with a namespace by its name or by
+	 * `<namespace>__<name>`. A non-empty list without `mcp__` entries also keeps MCP tools (tools
 	 * with an `mcp__` name or namespace and the MCP resource tools) registered for codemode and
 	 * tool_search; only tool_search can declare them. An empty list exposes no tools.
 	 */
@@ -449,13 +450,13 @@ export class AgentSession {
 	private _usesDefaultTools: boolean;
 	private _defaultToolModifiers: string[];
 	/** Matches the `--tools` entries: tool names or patterns. */
-	private _allowedTools?: (name: string) => boolean;
+	private _allowedTools?: (tool: ToolDefinition) => boolean;
 	/**
 	 * Whether the allowlist filters MCP tools: it is empty (`--no-tools`) or has an entry that starts
 	 * with `mcp__`. Otherwise it keeps MCP tools registered for codemode and tool_search.
 	 */
 	private _allowlistFiltersMcp = false;
-	private _excludedTools?: (name: string) => boolean;
+	private _excludedTools?: (tool: ToolDefinition) => boolean;
 	private _baseToolsOverride?: Record<string, AgentTool>;
 	private _sessionStartEvent: SessionStartEvent;
 	private _extensionUIContext?: ExtensionUIContext;
@@ -501,10 +502,10 @@ export class AgentSession {
 		this._usesDefaultTools = config.usesDefaultTools ?? false;
 		this._defaultToolModifiers = config.defaultToolModifiers ?? [];
 		if (config.allowedToolNames) {
-			this._allowedTools = createToolNameMatcher(config.allowedToolNames);
+			this._allowedTools = createToolMatcher(config.allowedToolNames);
 			this._allowlistFiltersMcp = config.allowedToolNames.length === 0 || config.allowedToolNames.some(hasMcpPrefix);
 		}
-		this._excludedTools = config.excludedToolNames ? createToolNameMatcher(config.excludedToolNames) : undefined;
+		this._excludedTools = config.excludedToolNames ? createToolMatcher(config.excludedToolNames) : undefined;
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
@@ -1533,8 +1534,8 @@ export class AgentSession {
 	 * unless the allowlist filters them (see `_allowlistFiltersMcp`).
 	 */
 	private _isAllowedTool(definition: ToolDefinition): boolean {
-		if (this._excludedTools?.(definition.name)) return false;
-		if (!this._allowedTools || this._allowedTools(definition.name)) return true;
+		if (this._excludedTools?.(definition)) return false;
+		if (!this._allowedTools || this._allowedTools(definition)) return true;
 		return !this._allowlistFiltersMcp && isMcpTool(definition);
 	}
 
@@ -1545,7 +1546,7 @@ export class AgentSession {
 	 * to tools restored from the transcript or set by extensions.
 	 */
 	private _isActivatable(definition: ToolDefinition): boolean {
-		if (!this._allowedTools || this._allowedTools(definition.name) || !isMcpTool(definition)) return true;
+		if (!this._allowedTools || this._allowedTools(definition) || !isMcpTool(definition)) return true;
 		return this._getToolExposure(definition.name) !== "direct" && this._toolRegistry.has("tool_search");
 	}
 
@@ -3571,11 +3572,11 @@ export class AgentSession {
 			: [...previousActiveToolNames];
 
 		if (allowedTools) {
-			for (const toolName of this._toolRegistry.keys()) {
+			for (const { definition } of this._toolDefinitions.values()) {
 				// Naming or matching a tool activates it even when it is not active by default. MCP tools
 				// kept registered without being named stay inactive.
-				if (allowedTools(toolName) && this._isDeclarable(toolName)) {
-					nextActiveToolNames.push(toolName);
+				if (allowedTools(definition) && this._isDeclarable(definition.name)) {
+					nextActiveToolNames.push(definition.name);
 				}
 			}
 		} else if (options?.includeAllExtensionTools) {
